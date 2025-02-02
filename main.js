@@ -10,7 +10,7 @@ let data = [];
     monitorCanvas.height = height;
 
     const maxCPU = 100;
-    const barCount = 20;
+    const barCount = 60;
     const maxMemory = 4045;
     const maxDiskWrite = 8000;
     const barWidth = width / barCount - 2;
