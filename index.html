@@ -5,10 +5,251 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Raspberry Pi Health Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            min-height: 100vh;
+            overflow-x: auto;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem 2rem;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 300;
+            text-align: center;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background: #4CAF50;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .controls {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .control-group label {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        select {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .monitor-container {
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: calc(100vh - 200px);
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 1rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #monitor {
+            display: block;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .legend {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 4px;
+            margin-right: 0.5rem;
+            border-radius: 2px;
+        }
+
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 0.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+        }
+
+        .error {
+            color: #ff6b6b;
+        }
+
+        .success {
+            color: #4CAF50;
+        }
+
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .header h1 {
+                font-size: 1.5rem;
+            }
+            
+            .monitor-container {
+                padding: 1rem;
+            }
+        }
+    </style>
 </head>
 
-<body style="background-color: black;">
-    <canvas id="monitor"></canvas>
+<body>
+    <div class="header">
+        <h1><span class="status-indicator"></span>Raspberry Pi Health Monitor</h1>
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="zoomLevel">Zoom:</label>
+            <button id="zoomOut">-</button>
+            <span id="zoomLevel">100%</span>
+            <button id="zoomIn">+</button>
+        </div>
+        
+        <div class="control-group">
+            <label for="timeRange">Time Range:</label>
+            <select id="timeRange">
+                <option value="30">Last 30 minutes (30 points)</option>
+                <option value="60">Last Hour (60 points)</option>
+                <option value="240">Last 4 Hours (240 points)</option>
+                <option value="480">Last 8 Hours (480 points)</option>
+                <option value="720">Last 12 Hours (720 points)</option>
+                <option value="1440">Last 24 Hours (1440 points)</option>
+                <option value="2880">Last 2 Days (2880 points)</option>
+                <option value="7200">Last 5 Days (7200 points)</option>
+                <option value="10080">Last Week (10080 points)</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <button id="pauseBtn">Pause</button>
+            <button id="resetBtn">Reset View</button>
+        </div>
+    </div>
+
+    <div class="monitor-container">
+        <div class="canvas-wrapper">
+            <canvas id="monitor"></canvas>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff4757;"></div>
+                    <span>CPU Usage</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #3742fa;"></div>
+                    <span>Temperature</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #2ed573;"></div>
+                    <span>Memory Usage</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ffa502;"></div>
+                    <span>Disk Usage</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span id="connectionStatus" class="success">Connected</span>
+        <span id="lastUpdate">Last update: --</span>
+        <span id="dataCount">Data points: 0</span>
+    </div>
+
     <script src="main.js"></script>
 </body>
 
