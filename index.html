@@ -4,252 +4,250 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Raspberry Pi Health Monitor</title>
+    <title>Pi Monitor</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.min.css"
+        integrity="sha384-IfV0B7MIOYuO95kO9G5ySKPz/85zqFNOAs8iy4tkK5zd9izhJAB8b7lHrwYqqmYE" crossorigin="anonymous">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            color-scheme: light;
+            --page: #f9f9f7;
+            --surface: #fcfcfb;
+            --surface-2: #f3f2ee;
+            --ink: #0b0b0b;
+            --ink-2: #52514e;
+            --muted: #898781;
+            --grid: #e1e0d9;
+            --axis: #c3c2b7;
+            --border: rgba(11, 11, 11, 0.10);
+            --series-1: #2a78d6;
+            --series-2: #eb6834;
+            --good: #0ca30c;
+            --warning: #fab219;
+            --serious: #ec835a;
+            --critical: #d03b3b;
+            --idle: #898781;
+            --radius: 10px;
         }
+
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) {
+                color-scheme: dark;
+                --page: #0d0d0d;
+                --surface: #1a1a19;
+                --surface-2: #232321;
+                --ink: #ffffff;
+                --ink-2: #c3c2b7;
+                --grid: #2c2c2a;
+                --axis: #383835;
+                --border: rgba(255, 255, 255, 0.10);
+                --series-1: #3987e5;
+                --series-2: #d95926;
+            }
+        }
+
+        :root[data-theme="dark"] {
+            color-scheme: dark;
+            --page: #0d0d0d;
+            --surface: #1a1a19;
+            --surface-2: #232321;
+            --ink: #ffffff;
+            --ink-2: #c3c2b7;
+            --grid: #2c2c2a;
+            --axis: #383835;
+            --border: rgba(255, 255, 255, 0.10);
+            --series-1: #3987e5;
+            --series-2: #d95926;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: white;
-            min-height: 100vh;
-            overflow-x: auto;
+            font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+            background: var(--page);
+            color: var(--ink);
+            font-size: 14px;
+            line-height: 1.4;
         }
 
-        .header {
-            background: rgba(0, 0, 0, 0.3);
-            padding: 1rem 2rem;
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
+        .wrap { max-width: 1400px; margin: 0 auto; padding: 16px; }
 
-        .header h1 {
-            font-size: 2rem;
-            font-weight: 300;
-            text-align: center;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        header {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; flex-wrap: wrap; margin-bottom: 16px;
         }
+        header h1 { font-size: 20px; font-weight: 600; }
+        .host { color: var(--ink-2); font-size: 13px; }
+        .host span + span::before { content: "·"; margin: 0 6px; color: var(--muted); }
 
-        .status-indicator {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            background: #4CAF50;
-            border-radius: 50%;
-            margin-right: 8px;
-            animation: pulse 2s infinite;
+        .conn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
+        .conn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); }
+        .conn.live .dot { background: var(--good); }
+        .conn.lost .dot { background: var(--critical); }
+
+        button, .seg button {
+            font: inherit; color: var(--ink); background: var(--surface);
+            border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; cursor: pointer;
         }
+        button:hover { background: var(--surface-2); }
+        button:focus-visible { outline: 2px solid var(--series-1); outline-offset: 1px; }
 
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
+        .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+        .seg { display: inline-flex; max-width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+        .seg button { flex: none; border: 0; border-radius: 0; padding: 6px 12px; background: transparent; color: var(--ink-2); }
+        .seg button + button { border-left: 1px solid var(--border); }
+        .seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--ink); font-weight: 600; }
+        .toolbar .note { color: var(--muted); font-size: 12px; }
+
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px 16px;
         }
+        .card h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 8px; }
+        .card h2 small { font-weight: 400; color: var(--muted); }
 
-        .controls {
-            background: rgba(0, 0, 0, 0.2);
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 1rem;
-            flex-wrap: wrap;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        /* Stat tiles */
+        .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .tile .label { font-size: 12px; color: var(--ink-2); }
+        .tile .value { font-size: 26px; font-weight: 600; margin-top: 2px; }
+        .tile .value small { font-size: 14px; font-weight: 400; color: var(--ink-2); margin-left: 2px; }
+        .tile .sub { font-size: 12px; color: var(--muted); margin-top: 2px; min-height: 17px; }
+        .meter { height: 4px; border-radius: 2px; background: var(--grid); margin-top: 8px; overflow: hidden; }
+        .meter i { display: block; height: 100%; border-radius: 2px; background: var(--series-1); width: 0; transition: width .4s; }
+        .meter i.warn { background: var(--warning); }
+        .meter i.crit { background: var(--critical); }
+
+        /* Charts */
+        .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .chart { min-height: 220px; position: relative; transition: opacity .2s; }
+        .chart.loading { opacity: .5; }
+        .chart .plot { width: 100%; }
+        .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); margin: -2px 0 6px; }
+        .legend span { display: inline-flex; align-items: center; gap: 6px; }
+        .legend i { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+        .legend i.band { height: 8px; opacity: .25; }
+        .empty { color: var(--muted); font-size: 13px; padding: 40px 0; text-align: center; }
+
+        .u-legend { display: none; }
+        .uplot { font-family: inherit; }
+
+        .tip {
+            position: absolute; pointer-events: none; z-index: 5; display: none;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+            padding: 6px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0, 0, 0, .12); white-space: nowrap;
         }
+        .tip .t { color: var(--muted); margin-bottom: 2px; }
+        .tip .row { display: flex; align-items: center; gap: 8px; }
+        .tip .row i { width: 10px; height: 2px; display: inline-block; }
+        .tip .row b { font-variant-numeric: tabular-nums; }
+        .tip .row span { color: var(--ink-2); }
 
-        .control-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
+        /* Services */
+        .grid2 { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 16px; }
+        @media (max-width: 1000px) { .grid2 { grid-template-columns: 1fr; } }
 
-        .control-group label {
-            font-size: 0.9rem;
-            font-weight: 500;
-        }
+        .summary { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); margin-bottom: 10px; }
+        .group { margin-top: 12px; }
+        .group h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        td, th { padding: 6px 6px; text-align: left; border-top: 1px solid var(--grid); vertical-align: middle; }
+        th { font-weight: 500; color: var(--muted); font-size: 12px; border-top: 0; }
+        td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+        td.name { font-weight: 500; overflow-wrap: anywhere; }
+        td.detail { color: var(--ink-2); overflow-wrap: anywhere; }
 
-        button {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 0.9rem;
-        }
+        .status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
+        .status svg { width: 14px; height: 14px; flex: none; }
+        .status.up { color: var(--ink-2); }
+        .status.up svg { color: var(--good); }
+        .status.warn svg { color: var(--warning); }
+        .status.down { color: var(--critical); font-weight: 600; }
+        .status.down svg { color: var(--critical); }
+        .status.stopped { color: var(--muted); }
+        .status.stopped svg { color: var(--idle); }
 
-        button:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-1px);
-        }
+        .stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); }
+        .stats b { color: var(--ink); font-weight: 500; }
 
-        button:active {
-            transform: translateY(0);
-        }
+        .ports { display: flex; flex-wrap: wrap; gap: 6px; }
+        .ports span { font-size: 12px; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); }
 
-        select {
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: white;
-            padding: 0.5rem;
-            border-radius: 6px;
-            font-size: 0.9rem;
-        }
+        .events { list-style: none; max-height: 340px; overflow: auto; }
+        .events li { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; padding: 7px 0; border-top: 1px solid var(--grid); font-size: 13px; }
+        .events li:first-child { border-top: 0; }
+        .events .when { color: var(--muted); font-size: 12px; grid-column: 2; }
 
-        .monitor-container {
-            padding: 2rem;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: calc(100vh - 200px);
-        }
+        .tier { margin-bottom: 12px; }
+        .tier .top { display: flex; justify-content: space-between; font-size: 13px; }
+        .tier .top span:last-child { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+        .tier .sub { font-size: 12px; color: var(--muted); }
+        .bigsize { font-size: 26px; font-weight: 600; }
+        .bigsize small { font-size: 13px; color: var(--ink-2); font-weight: 400; }
 
-        .canvas-wrapper {
-            position: relative;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 12px;
-            padding: 1rem;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
+        details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; margin-top: 8px; }
 
-        #monitor {
-            display: block;
-            border-radius: 8px;
-            background: rgba(0, 0, 0, 0.5);
-        }
-
-        .legend {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 1rem;
-            border-radius: 8px;
-            font-size: 0.9rem;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 0.5rem;
-        }
-
-        .legend-color {
-            width: 20px;
-            height: 4px;
-            margin-right: 0.5rem;
-            border-radius: 2px;
-        }
-
-        .status-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 0.5rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.9rem;
-        }
-
-        .error {
-            color: #ff6b6b;
-        }
-
-        .success {
-            color: #4CAF50;
-        }
-
-        @media (max-width: 768px) {
-            .controls {
-                flex-direction: column;
-                gap: 0.5rem;
-            }
-            
-            .header h1 {
-                font-size: 1.5rem;
-            }
-            
-            .monitor-container {
-                padding: 1rem;
-            }
+        @media (max-width: 600px) {
+            .charts { grid-template-columns: 1fr; }
+            .hide-sm { display: none; }
         }
     </style>
 </head>
 
 <body>
-    <div class="header">
-        <h1><span class="status-indicator"></span>Raspberry Pi Health Monitor</h1>
-    </div>
+    <div class="wrap">
+        <header>
+            <div>
+                <h1>Pi Monitor</h1>
+                <div class="host" id="host"></div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:center">
+                <span class="conn" id="conn"><span class="dot"></span><span id="connText">Connecting…</span></span>
+                <button id="theme" title="Toggle theme" aria-label="Toggle theme">◐</button>
+            </div>
+        </header>
 
-    <div class="controls">
-        <div class="control-group">
-            <label for="zoomLevel">Zoom:</label>
-            <button id="zoomOut">-</button>
-            <span id="zoomLevel">100%</span>
-            <button id="zoomIn">+</button>
+        <div class="toolbar">
+            <div class="seg" id="ranges" role="group" aria-label="Time range">
+                <button data-range="15m">15m</button>
+                <button data-range="1h">1h</button>
+                <button data-range="6h">6h</button>
+                <button data-range="24h">24h</button>
+                <button data-range="7d">7d</button>
+                <button data-range="30d">30d</button>
+                <button data-range="1y">1y</button>
+                <button data-range="2y">2y</button>
+            </div>
+            <span class="note" id="tierNote"></span>
         </div>
-        
-        <div class="control-group">
-            <label for="timeRange">Time Range:</label>
-            <select id="timeRange">
-                <option value="30">Last 30 minutes (30 points)</option>
-                <option value="60">Last Hour (60 points)</option>
-                <option value="240">Last 4 Hours (240 points)</option>
-                <option value="480">Last 8 Hours (480 points)</option>
-                <option value="720">Last 12 Hours (720 points)</option>
-                <option value="1440">Last 24 Hours (1440 points)</option>
-                <option value="2880">Last 2 Days (2880 points)</option>
-                <option value="7200">Last 5 Days (7200 points)</option>
-                <option value="10080">Last Week (10080 points)</option>
-            </select>
-        </div>
-        
-        <div class="control-group">
-            <button id="pauseBtn">Pause</button>
-            <button id="resetBtn">Reset View</button>
-        </div>
-    </div>
 
-    <div class="monitor-container">
-        <div class="canvas-wrapper">
-            <canvas id="monitor"></canvas>
-            <div class="legend">
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #ff4757;"></div>
-                    <span>CPU Usage</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #3742fa;"></div>
-                    <span>Temperature</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #2ed573;"></div>
-                    <span>Memory Usage</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #ffa502;"></div>
-                    <span>Disk Usage</span>
-                </div>
+        <section class="tiles" id="tiles" aria-label="Current readings"></section>
+
+        <section class="charts" id="charts"></section>
+
+        <div class="grid2">
+            <section class="card">
+                <h2>Services</h2>
+                <div class="summary" id="svcSummary"></div>
+                <div id="services"></div>
+            </section>
+            <div style="display:grid;gap:12px;align-content:start">
+                <section class="card">
+                    <h2>Recent status changes</h2>
+                    <ul class="events" id="events"></ul>
+                </section>
+                <section class="card">
+                    <h2>Metrics storage</h2>
+                    <div id="storage"></div>
+                </section>
+                <section class="card">
+                    <h2>Listening ports <small>(all interfaces)</small></h2>
+                    <div class="ports" id="ports"></div>
+                </section>
             </div>
         </div>
     </div>
 
-    <div class="status-bar">
-        <span id="connectionStatus" class="success">Connected</span>
-        <span id="lastUpdate">Last update: --</span>
-        <span id="dataCount">Data points: 0</span>
-    </div>
-
+    <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.iife.min.js"
+        integrity="sha384-Gx3t0zdBAuQOuvvmaLZj7HKEiSgWTAs+VdtNY7wt19QDPTDQjFIwAuXDj0zeN00c" crossorigin="anonymous"></script>
     <script src="main.js"></script>
 </body>
 
