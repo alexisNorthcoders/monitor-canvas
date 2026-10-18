@@ -401,6 +401,13 @@ const charts = (() => {
 
 // ---------- logs ----------
 
+// Groups whose rows open the logs panel. errEmpty is the note shown on the
+// Errors tab while it has received no lines.
+const LOG_GROUPS = {
+    pm2: {},
+    docker: { errEmpty: 'Nothing on stderr. Containers started with a TTY write everything to Output.' },
+};
+
 // logs drives the <dialog id="logs">. It lives outside #services so the
 // 5-second table rebuild never touches it. Lines are only held while it is open.
 const logs = (() => {
@@ -424,6 +431,14 @@ const logs = (() => {
             t.follow = t.pane.scrollHeight - t.pane.scrollTop - t.pane.clientHeight < 4;
             if (key === active) jump.hidden = t.follow;
         });
+    }
+
+    const note = document.getElementById('logsNote');
+
+    function refreshNote() {
+        const text = current && LOG_GROUPS[current.group]?.errEmpty;
+        note.textContent = text || '';
+        note.hidden = !(text && active === 'err' && tabs.err.es && !tabs.err.pane.childElementCount);
     }
 
     function setConn(cls, text) { connEl.className = `conn ${cls}`.trim(); connText.textContent = text; }
@@ -461,6 +476,7 @@ const logs = (() => {
         if (t.follow) t.pane.scrollTop = t.pane.scrollHeight;
         jump.hidden = t.follow;
         if (focus) t.tab.focus();
+        refreshNote();
     }
 
     function stream(key) {
@@ -475,6 +491,7 @@ const logs = (() => {
             t.unseen = 0;
             showCount(t);
             stick(t);
+            refreshNote();
             if (key === active || !tabs[active].es) setConn('live', 'Live');
         };
         es.onerror = () => { if (t.es === es && es.readyState !== EventSource.CLOSED) setConn('lost', 'Reconnecting…'); };
@@ -483,6 +500,7 @@ const logs = (() => {
             try { lines = JSON.parse(e.data).lines || []; } catch { return; }
             if (!lines.length) return;
             append(t, lines);
+            refreshNote();
             if (key !== active) { t.unseen += lines.length; showCount(t); }
         };
         es.addEventListener('gone', (e) => {
@@ -490,6 +508,7 @@ const logs = (() => {
             try { msg = JSON.parse(e.data).message || msg; } catch { /* keep default */ }
             es.close();
             t.es = null;
+            refreshNote();
             setConn('lost', msg);
         });
     }
@@ -499,6 +518,7 @@ const logs = (() => {
             if (tabs[key].es) tabs[key].es.close();
             tabs[key].es = null;
         }
+        refreshNote();
     }
 
     function setUrl(value) {
@@ -542,7 +562,7 @@ const logs = (() => {
     });
     dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // backdrop
     document.getElementById('logsClose').addEventListener('click', () => dlg.close());
-    document.getElementById('logsClear').addEventListener('click', () => { tabs[active].pane.replaceChildren(); tabs[active].follow = true; jump.hidden = true; });
+    document.getElementById('logsClear').addEventListener('click', () => { tabs[active].pane.replaceChildren(); tabs[active].follow = true; jump.hidden = true; refreshNote(); });
     jump.addEventListener('click', () => stick(tabs[active]));
 
     wrapBox.checked = storageGet('logsWrap') !== '0';
@@ -567,7 +587,7 @@ const logs = (() => {
     return { open, update };
 })();
 
-// ?logs=pm2/<name> opens the panel on load.
+// ?logs=<group>/<name> opens the panel on load.
 {
     const want = params.get('logs');
     const slash = want ? want.indexOf('/') : -1;
@@ -621,9 +641,9 @@ function renderServices(services) {
         for (const s of items) {
             let detail = s.detail || '';
             if (s.status === 'up' && s.since) detail = (group === 'system' ? `${detail} · ` : '') + `up ${fmtDuration(now - s.since)}`;
-            // name === group is go-server's stand-in row for "pm2 itself can't be read".
+            // name === group is go-server's stand-in row for "the whole group can't be read".
             const nameCell = el('td', { class: 'name' });
-            if (group === 'pm2' && s.name !== group) {
+            if (LOG_GROUPS[group] && s.name !== group) {
                 const btn = el('button', { type: 'button', class: 'linkish', text: s.name, title: `Show logs for ${s.name}` });
                 btn.addEventListener('click', () => logs.open(group, s.name, s.status));
                 nameCell.append(btn);
