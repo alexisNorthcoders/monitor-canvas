@@ -214,6 +214,8 @@
         .logs-pane[hidden] { display: none; }
         .logs-pane .line { white-space: pre-wrap; overflow-wrap: anywhere; }
         dialog#logs.nowrap .logs-pane .line { white-space: pre; overflow-wrap: normal; }
+        #logsNote { position: absolute; left: 14px; top: 10px; right: 14px; color: var(--muted); font-size: 13px; pointer-events: none; }
+        #logsNote[hidden] { display: none; }
         #logsJump { position: absolute; right: 18px; bottom: 14px; box-shadow: 0 2px 10px rgba(0, 0, 0, .25); }
         #logsJump[hidden] { display: none; }
         @media (max-width: 600px) {
@@ -301,6 +303,7 @@
         <div class="logs-body">
             <div class="logs-pane" id="logsPane-out" role="tabpanel" aria-labelledby="logsTab-out" tabindex="0"></div>
             <div class="logs-pane" id="logsPane-err" role="tabpanel" aria-labelledby="logsTab-err" tabindex="0" hidden></div>
+            <p id="logsNote" hidden></p>
             <button type="button" id="logsJump" hidden>Jump to latest ↓</button>
         </div>
     </dialog>
