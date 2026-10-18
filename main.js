@@ -22,6 +22,9 @@ const CHARTS = [
     { id: 'net', title: 'Network', unit: 'kB/s', series: [{ key: 'net_rx', label: 'Received' }, { key: 'net_tx', label: 'Sent' }] },
 ];
 
+const LOG_MAX_LINES = 2000;
+const ANSI = /\x1b\[[0-9;?]*[ -\/]*[@-~]/g;
+
 const GROUPS = [
     ['system', 'System services'],
     ['pm2', 'pm2 processes'],
@@ -396,6 +399,181 @@ const charts = (() => {
     };
 })();
 
+// ---------- logs ----------
+
+// logs drives the <dialog id="logs">. It lives outside #services so the
+// 5-second table rebuild never touches it. Lines are only held while it is open.
+const logs = (() => {
+    const dlg = document.getElementById('logs');
+    const tabs = { out: {}, err: {} };
+    const jump = document.getElementById('logsJump');
+    const wrapBox = document.getElementById('logsWrap');
+    const connEl = document.getElementById('logsConn');
+    const connText = document.getElementById('logsConnText');
+    let current = null; // { group, name }
+    let active = 'out';
+
+    for (const key of ['out', 'err']) {
+        const t = tabs[key];
+        t.tab = document.getElementById(`logsTab-${key}`);
+        t.pane = document.getElementById(`logsPane-${key}`);
+        t.badge = t.tab.querySelector('.count');
+        t.follow = true;
+        t.unseen = 0;
+        t.pane.addEventListener('scroll', () => {
+            t.follow = t.pane.scrollHeight - t.pane.scrollTop - t.pane.clientHeight < 4;
+            if (key === active) jump.hidden = t.follow;
+        });
+    }
+
+    function setConn(cls, text) { connEl.className = `conn ${cls}`.trim(); connText.textContent = text; }
+
+    function showCount(t) {
+        t.badge.textContent = t.unseen > 999 ? '999+' : String(t.unseen);
+        t.badge.hidden = !t.unseen;
+    }
+
+    function append(t, lines) {
+        const frag = document.createDocumentFragment();
+        for (const line of lines) frag.append(el('div', { class: 'line', text: String(line).replace(ANSI, '') }));
+        t.pane.append(frag);
+        while (t.pane.childElementCount > LOG_MAX_LINES) t.pane.firstElementChild.remove();
+        if (t.follow) t.pane.scrollTop = t.pane.scrollHeight;
+    }
+
+    function stick(t) {
+        t.follow = true;
+        t.pane.scrollTop = t.pane.scrollHeight;
+        if (t === tabs[active]) jump.hidden = true;
+    }
+
+    function selectTab(key, focus) {
+        active = key;
+        for (const k of ['out', 'err']) {
+            const on = k === key;
+            tabs[k].tab.setAttribute('aria-selected', String(on));
+            tabs[k].tab.tabIndex = on ? 0 : -1;
+            tabs[k].pane.hidden = !on;
+        }
+        const t = tabs[key];
+        t.unseen = 0;
+        showCount(t);
+        if (t.follow) t.pane.scrollTop = t.pane.scrollHeight;
+        jump.hidden = t.follow;
+        if (focus) t.tab.focus();
+    }
+
+    function stream(key) {
+        const t = tabs[key];
+        const { group, name } = current;
+        const url = `${API}/monitor/logs/${encodeURIComponent(group)}/${encodeURIComponent(name)}?stream=${key}&lines=200`;
+        const es = new EventSource(url);
+        t.es = es;
+        es.onopen = () => {
+            // The server replays the last lines on every (re)connect.
+            t.pane.replaceChildren();
+            t.unseen = 0;
+            showCount(t);
+            stick(t);
+            if (key === active || !tabs[active].es) setConn('live', 'Live');
+        };
+        es.onerror = () => { if (t.es === es && es.readyState !== EventSource.CLOSED) setConn('lost', 'Reconnecting…'); };
+        es.onmessage = (e) => {
+            let lines;
+            try { lines = JSON.parse(e.data).lines || []; } catch { return; }
+            if (!lines.length) return;
+            append(t, lines);
+            if (key !== active) { t.unseen += lines.length; showCount(t); }
+        };
+        es.addEventListener('gone', (e) => {
+            let msg = 'Log unavailable';
+            try { msg = JSON.parse(e.data).message || msg; } catch { /* keep default */ }
+            es.close();
+            t.es = null;
+            setConn('lost', msg);
+        });
+    }
+
+    function closeStreams() {
+        for (const key of ['out', 'err']) {
+            if (tabs[key].es) tabs[key].es.close();
+            tabs[key].es = null;
+        }
+    }
+
+    function setUrl(value) {
+        const u = new URL(location.href);
+        if (value) u.searchParams.set('logs', value); else u.searchParams.delete('logs');
+        history.replaceState(null, '', u);
+    }
+
+    function setStatus(status) {
+        const slot = document.getElementById('logsStatus');
+        slot.replaceChildren(...(status ? [statusBadge(status)] : []));
+    }
+
+    function open(group, name, status) {
+        if (current && current.group === group && current.name === name && dlg.open) return;
+        closeStreams();
+        current = { group, name };
+        document.getElementById('logsName').textContent = name;
+        document.getElementById('logsGroup').textContent = group;
+        setStatus(status);
+        for (const k of ['out', 'err']) { tabs[k].pane.replaceChildren(); tabs[k].unseen = 0; tabs[k].follow = true; showCount(tabs[k]); }
+        setConn('', 'Connecting…');
+        selectTab('out');
+        if (!dlg.open) dlg.showModal();
+        setUrl(`${group}/${name}`);
+        stream('out');
+        stream('err');
+    }
+
+    // The Services table calls this on every refresh so the badge stays current.
+    function update(services) {
+        if (!current || !dlg.open) return;
+        const s = services.find((x) => x.group === current.group && x.name === current.name);
+        setStatus(s ? s.status : null);
+    }
+
+    dlg.addEventListener('close', () => {
+        closeStreams();
+        current = null;
+        setUrl(null);
+    });
+    dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // backdrop
+    document.getElementById('logsClose').addEventListener('click', () => dlg.close());
+    document.getElementById('logsClear').addEventListener('click', () => { tabs[active].pane.replaceChildren(); tabs[active].follow = true; jump.hidden = true; });
+    jump.addEventListener('click', () => stick(tabs[active]));
+
+    wrapBox.checked = storageGet('logsWrap') !== '0';
+    const applyWrap = () => dlg.classList.toggle('nowrap', !wrapBox.checked);
+    applyWrap();
+    wrapBox.addEventListener('change', () => { storageSet('logsWrap', wrapBox.checked ? '1' : '0'); applyWrap(); });
+
+    const order = ['out', 'err'];
+    for (const key of order) {
+        tabs[key].tab.addEventListener('click', () => selectTab(key));
+        tabs[key].tab.addEventListener('keydown', (e) => {
+            const i = order.indexOf(key);
+            let next = null;
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = order[(i + 1) % order.length];
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = order[(i + order.length - 1) % order.length];
+            else if (e.key === 'Home') next = order[0];
+            else if (e.key === 'End') next = order[order.length - 1];
+            if (next) { e.preventDefault(); selectTab(next, true); }
+        });
+    }
+
+    return { open, update };
+})();
+
+// ?logs=pm2/<name> opens the panel on load.
+{
+    const want = params.get('logs');
+    const slash = want ? want.indexOf('/') : -1;
+    if (slash > 0 && slash < want.length - 1) logs.open(want.slice(0, slash), want.slice(slash + 1), null);
+}
+
 // ---------- services ----------
 
 function renderServices(services) {
@@ -409,6 +587,7 @@ function renderServices(services) {
         return b;
     }));
 
+    logs.update(services);
     const now = Date.now() / 1000;
     root.replaceChildren();
     for (const [group, title] of GROUPS) {
@@ -442,7 +621,16 @@ function renderServices(services) {
         for (const s of items) {
             let detail = s.detail || '';
             if (s.status === 'up' && s.since) detail = (group === 'system' ? `${detail} · ` : '') + `up ${fmtDuration(now - s.since)}`;
-            const row = el('tr', {}, el('td', {}, statusBadge(s.status)), el('td', { class: 'name', text: s.name }), el('td', { class: 'detail', text: detail }));
+            // name === group is go-server's stand-in row for "pm2 itself can't be read".
+            const nameCell = el('td', { class: 'name' });
+            if (group === 'pm2' && s.name !== group) {
+                const btn = el('button', { type: 'button', class: 'linkish', text: s.name, title: `Show logs for ${s.name}` });
+                btn.addEventListener('click', () => logs.open(group, s.name, s.status));
+                nameCell.append(btn);
+            } else {
+                nameCell.textContent = s.name;
+            }
+            const row = el('tr', {}, el('td', {}, statusBadge(s.status)), nameCell, el('td', { class: 'detail', text: detail }));
             if (withRes) {
                 row.append(
                     el('td', { class: 'num', text: s.cpu != null ? `${fmtNum(s.cpu)}%` : '' }),

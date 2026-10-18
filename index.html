@@ -185,6 +185,40 @@
 
         details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; margin-top: 8px; }
 
+        /* Logs panel */
+        button.linkish { background: none; border: 0; padding: 0; font: inherit; font-weight: 500; color: inherit; text-align: left; overflow-wrap: anywhere; }
+        button.linkish:hover { background: none; color: var(--series-1); text-decoration: underline; }
+        dialog#logs {
+            color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 0; margin: auto; width: min(1100px, 92vw); height: min(780px, 88vh); overflow: hidden;
+        }
+        dialog#logs[open] { display: flex; flex-direction: column; }
+        dialog#logs::backdrop { background: rgba(0, 0, 0, .5); }
+        .logs-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+        .logs-head h2 { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+        .logs-head .group { margin: 0; color: var(--muted); font-size: 12px; }
+        .logs-head .spacer { flex: 1; }
+        .logs-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+        .logs-bar [role="tablist"] { display: inline-flex; gap: 4px; }
+        .logs-bar [role="tab"] { background: transparent; border-color: transparent; color: var(--ink-2); }
+        .logs-bar [role="tab"][aria-selected="true"] { background: var(--surface); border-color: var(--border); color: var(--ink); font-weight: 600; }
+        .logs-bar .count { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--series-1); color: #fff; font-size: 11px; font-variant-numeric: tabular-nums; }
+        .logs-bar .count[hidden] { display: none; }
+        .logs-bar label { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 13px; }
+        .logs-bar .spacer { flex: 1; }
+        .logs-body { position: relative; flex: 1; min-height: 0; display: flex; }
+        .logs-pane {
+            flex: 1; min-width: 0; overflow: auto; padding: 8px 14px; background: var(--page);
+            font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+        .logs-pane[hidden] { display: none; }
+        .logs-pane .line { white-space: pre-wrap; overflow-wrap: anywhere; }
+        dialog#logs.nowrap .logs-pane .line { white-space: pre; overflow-wrap: normal; }
+        #logsJump { position: absolute; right: 18px; bottom: 14px; box-shadow: 0 2px 10px rgba(0, 0, 0, .25); }
+        #logsJump[hidden] { display: none; }
+        @media (max-width: 600px) {
+            dialog#logs { width: 100vw; height: 100dvh; max-width: none; max-height: none; border-radius: 0; border: 0; }
+        }
         @media (max-width: 600px) {
             .charts { grid-template-columns: 1fr; }
             .hide-sm { display: none; }
@@ -246,6 +280,30 @@
         </div>
     </div>
 
+    <dialog id="logs" aria-labelledby="logsName">
+        <div class="logs-head">
+            <span id="logsStatus"></span>
+            <h2 id="logsName"></h2>
+            <span class="group" id="logsGroup"></span>
+            <span class="spacer"></span>
+            <span class="conn" id="logsConn"><span class="dot"></span><span id="logsConnText">Connecting…</span></span>
+            <button type="button" id="logsClose" aria-label="Close logs">✕</button>
+        </div>
+        <div class="logs-bar">
+            <div role="tablist" aria-label="Log stream">
+                <button type="button" role="tab" id="logsTab-out" aria-controls="logsPane-out" aria-selected="true">Output</button>
+                <button type="button" role="tab" id="logsTab-err" aria-controls="logsPane-err" aria-selected="false" tabindex="-1">Errors<span class="count" hidden></span></button>
+            </div>
+            <span class="spacer"></span>
+            <label><input type="checkbox" id="logsWrap"> Wrap lines</label>
+            <button type="button" id="logsClear">Clear</button>
+        </div>
+        <div class="logs-body">
+            <div class="logs-pane" id="logsPane-out" role="tabpanel" aria-labelledby="logsTab-out" tabindex="0"></div>
+            <div class="logs-pane" id="logsPane-err" role="tabpanel" aria-labelledby="logsTab-err" tabindex="0" hidden></div>
+            <button type="button" id="logsJump" hidden>Jump to latest ↓</button>
+        </div>
+    </dialog>
     <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.iife.min.js"
         integrity="sha384-Gx3t0zdBAuQOuvvmaLZj7HKEiSgWTAs+VdtNY7wt19QDPTDQjFIwAuXDj0zeN00c" crossorigin="anonymous"></script>
     <script src="main.js"></script>
