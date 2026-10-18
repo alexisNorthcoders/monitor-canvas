@@ -401,8 +401,6 @@ const charts = (() => {
 
 // ---------- logs ----------
 
-// logs drives the <dialog id="logs">. It lives outside #services so the
-// 5-second table rebuild never touches it. Lines are only held while it is open.
 // Groups whose rows open the logs panel. errEmpty is the note shown on the
 // Errors tab while it has received no lines.
 const LOG_GROUPS = {
@@ -410,6 +408,8 @@ const LOG_GROUPS = {
     docker: { errEmpty: 'Nothing on stderr. Containers started with a TTY write everything to Output.' },
 };
 
+// logs drives the <dialog id="logs">. It lives outside #services so the
+// 5-second table rebuild never touches it. Lines are only held while it is open.
 const logs = (() => {
     const dlg = document.getElementById('logs');
     const tabs = { out: {}, err: {} };
