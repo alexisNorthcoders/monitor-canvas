@@ -34,3 +34,7 @@ Query parameters, mainly for development:
 
 - `?api=http://host:port` reads a different go-server.
 - `?range=7d` opens on a range. The last range picked is remembered in the browser.
+
+## Development
+
+`npm run dev` serves the page against a mock API. `npm run check` tests it in headless Chromium. See `AGENTS.md`.
